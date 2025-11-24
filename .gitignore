@@ -1,0 +1,10 @@
+.venv/
+
+backend/.env
+
+# Node modules
+frontend/node_modules/
+
+.idea/
+frontend/.next
+.DS_Store
