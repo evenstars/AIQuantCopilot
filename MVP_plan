@@ -1,0 +1,58 @@
+📅 详细每日排期
+
+
+Day 5–7：自动回测系统（Backtrader Pipeline）
+
+封装 Backtrader 回测函数
+
+接 Yahoo Finance 获取历史数据
+
+生成指标（Sharpe、Max Drawdown）
+
+返回 JSON 结果
+
+异步执行（Celery / RQ）
+
+Day 8–10：可视化展示（前端）
+
+接入图表库（Nivo/Recharts）
+
+Equity curve
+
+Drawdown curve
+
+Trade list
+
+回测 KPI 区块
+
+回测任务状态检查
+
+Day 11–12：自动分析（LLM Insight）
+
+LLM Prompt：
+
+分析为什么表现好/坏
+
+是否过拟合
+
+识别 regime shift
+
+给出改进建议
+
+把回测结果 + 报告一起显示
+
+Day 13：研究报告（Markdown → 报告页）
+
+自动生成 Markdown
+
+转 HTML 显示
+
+可复制到 Notion
+
+Day 14：MVP Demo 整合 + 修 bug
+
+全流程测试
+
+修关键 bug
+
+为投资人/朋友准备 Demo

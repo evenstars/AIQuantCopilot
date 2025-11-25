@@ -5,6 +5,8 @@ backend/.env
 # Node modules
 frontend/node_modules/
 
+strategies/
+
 .idea/
 frontend/.next
 .DS_Store
