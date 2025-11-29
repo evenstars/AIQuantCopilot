@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { BACKEND_BASE_URL } from "./api/config";
 
 type Message = {
@@ -27,8 +27,63 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [toolResult, setToolResult] = useState<ToolResult | null>(null);
 
+  // === 单窗口关键：存储当前轮询 interval ===
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 组件卸载时清理 interval
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+      }
+    };
+  }, []);
+
+  // ====== 单窗口轮询功能 ======
+  const pollBacktestStatus = (taskId: string) => {
+    // 停掉之前的轮询
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${BACKEND_BASE_URL}/api/backtest/status/${taskId}`);
+        const data = await res.json();
+
+        // 完成 → 停止轮询 & 显示结果
+        if (data.status === "complete") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+
+          setToolResult(data.result);
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: "回测完成！" },
+          ]);
+        }
+
+        // 失败 → 停止轮询
+        if (data.status === "failed") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: "回测失败：" + data.error },
+          ]);
+        }
+      } catch (err) {
+        console.error("轮询失败:", err);
+      }
+    }, 1500);
+  };
+
+  // ====== 发送消息 ======
   const sendMessage = async () => {
     if (!input.trim()) return;
+
     const userMsg: Message = { role: "user", content: input };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
@@ -41,33 +96,32 @@ export default function HomePage() {
         body: JSON.stringify({ message: input }),
       });
 
-      if (!res.ok) throw new Error("Request failed");
-
       const data = await res.json();
-      const assistantMsg: Message = {
-        role: "assistant",
-        content: data.reply || "",
-      };
 
-      setMessages((prev) => [...prev, assistantMsg]);
-      setToolResult(data.tool_result || null);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data.reply || "" },
+      ]);
+
+      // 如果后端返回 task_id → 开始轮询
+      if (data.tool_result && data.tool_result.length > 0) {
+        const task = data.tool_result[0];
+        if (task.task_id) {
+          pollBacktestStatus(task.task_id);
+        }
+      }
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content: "调用后端失败，请检查服务是否启动。",
-        },
+        { role: "assistant", content: "调用后端失败，请检查服务是否启动。" },
       ]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLTextAreaElement>
-  ) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -89,7 +143,7 @@ export default function HomePage() {
           <div className="text-sm text-slate-500">
             👋 你好，我是你的量化研究助手。你可以问：
             <ul className="mt-2 list-disc pl-5">
-              <li>帮我写一个VOO的5-20日均线策略并回测</li>
+              <li>做一个 VOO 5-20 均线策略，从 2018 到 2022 的数据</li>
               <li>分析一下这个回测结果的风险收益</li>
               <li>帮我比较均值回归和趋势跟随策略</li>
             </ul>
@@ -99,9 +153,7 @@ export default function HomePage() {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`flex ${
-              m.role === "user" ? "justify-end" : "justify-start"
-            }`}
+            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
               className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
@@ -123,61 +175,11 @@ export default function HomePage() {
       {toolResult && (
         <section className="mt-4 rounded-xl border border-emerald-700 bg-emerald-950/40 p-4 text-sm">
           <h2 className="mb-2 text-base font-semibold text-emerald-300">
-            回测结果（示例）
+            回测结果
           </h2>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <div className="text-slate-400">标的</div>
-              <div className="font-medium">{toolResult.symbol}</div>
-            </div>
-            <div>
-              <div className="text-slate-400">均线参数</div>
-              <div className="font-medium">
-                fast: {toolResult.fast}, slow: {toolResult.slow}
-              </div>
-            </div>
-            <div>
-              <div className="text-slate-400">时间区间</div>
-              <div className="font-medium">
-                {toolResult.start} ~ {toolResult.end}
-              </div>
-            </div>
-            <div>
-              <div className="text-slate-400">年化收益 CAGR</div>
-              <div className="font-medium">
-                {toolResult.cagr !== undefined
-                  ? `${(toolResult.cagr * 100).toFixed(2)}%`
-                  : "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-slate-400">最大回撤</div>
-              <div className="font-medium">
-                {toolResult.max_drawdown !== undefined
-                  ? `${(toolResult.max_drawdown * 100).toFixed(2)}%`
-                  : "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-slate-400">胜率</div>
-              <div className="font-medium">
-                {toolResult.win_rate !== undefined
-                  ? `${(toolResult.win_rate * 100).toFixed(2)}%`
-                  : "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-slate-400">交易次数</div>
-              <div className="font-medium">
-                {toolResult.trades ?? "-"}
-              </div>
-            </div>
-          </div>
-          {toolResult.note && (
-            <p className="mt-2 text-xs text-emerald-300">
-              {toolResult.note}
-            </p>
-          )}
+          <pre className="text-xs text-emerald-200">
+            {JSON.stringify(toolResult, null, 2)}
+          </pre>
         </section>
       )}
 
